@@ -124,7 +124,7 @@ python scripts/compare_metrics.py --source 输入目录 --whisper medium.pt \
 ## 安装与配置
 
 ```bash
-git clone <本仓库地址> voxrelay && cd voxrelay
+git clone https://github.com/ClarkeLi/voxrelay.git && cd voxrelay
 # 在装好 GPT-SoVITS 依赖的 Python 环境里
 pip install -r requirements.txt
 cp config.example.json config.json
