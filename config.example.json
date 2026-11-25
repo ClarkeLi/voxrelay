@@ -1,0 +1,15 @@
+{
+  "gpt_sovits_dir": "/path/to/GPT-SoVITS",
+  "version": "v2Pro",
+  "gpt_weights": "GPT_weights_v2Pro/myvoice-e15.ckpt",
+  "sovits_weights": "SoVITS_weights_v2Pro/myvoice_e8_s232.pth",
+  "ref_list": "datasets/myvoice/myvoice.list",
+  "ref_base": "datasets/myvoice",
+  "realtime_ref": "",
+  "default_ref": null,
+  "base_rate": 3.8,
+  "device": "cpu",
+  "cache_dir": ".cache",
+  "port": 9881,
+  "remote": { "target": "user@192.168.1.20", "device": "BlackHole 2ch" }
+}

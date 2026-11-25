@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>VoxRelay</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%2316191f'/><path d='M3 7v2M6 4v8M9 6v4M12 3v10' stroke='%233ddc97' stroke-width='1.6' stroke-linecap='round'/></svg>">
+<link rel="stylesheet" href="/static/style.css">
+<script type="module" src="/static/app.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 7v2M5 4v8M8 1.5v13M11 5v6M14 7v2"/></svg>VOXRELAY</div>
+  <nav role="tablist">
+    <button role="tab" data-tab="live" aria-selected="true">实时</button>
+    <button role="tab" data-tab="tune" aria-selected="false">精调</button>
+  </nav>
+  <div class="spacer"></div>
+  <span class="readout" title="当前加载的权重">模型 <b id="model">—</b></span>
+  <span class="readout" title="最近 10 段“段尾到出声”的中位数">延迟 <b id="latency">—</b></span>
+  <span id="pill" class="pill" role="status">待机</span>
+</header>
+
+<main id="view-live" class="view live-grid">
+  <aside class="col">
+    <section class="panel">
+      <h2>输入</h2>
+      <select id="device" aria-label="麦克风"><option value="">系统默认麦克风</option></select>
+      <canvas id="inWave" class="scope" aria-label="输入波形"></canvas>
+      <div id="inMeter" class="meter gate" title="白线是断句阈值：超过它才算说话"><i></i><s></s></div>
+      <div class="scale"><span>-70</span><span id="inDb">—</span><span>0</span></div>
+      <div id="mode" class="seg-ctl" role="group" aria-label="触发方式">
+        <button data-v="auto">自动断句</button><button data-v="ptt">按住说话</button>
+      </div>
+      <button id="power" class="big">● 开始监听</button>
+      <button id="ptt" class="big talk" hidden>按住说话<kbd>空格</kbd></button>
+    </section>
+    <section class="panel">
+      <h2>输出</h2>
+      <canvas id="outWave" class="scope" aria-label="输出波形"></canvas>
+      <div id="outMeter" class="meter"><i></i></div>
+      <label class="field"><span>声音送到</span><select id="out">
+        <option value="local">本机扬声器 / 耳机</option>
+        <option value="sink">本机虚拟声卡</option>
+        <option value="remote">内网另一台 Mac</option>
+      </select></label>
+      <div id="sinkBox" class="sub" hidden>
+        <label class="field"><span>声卡</span><select id="sink"></select></label>
+      </div>
+      <div id="remoteBox" class="sub" hidden>
+        <label class="field"><span>SSH 地址</span><input id="remoteTarget" placeholder="用户名@内网地址" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>对方的声卡</span><select id="remoteDevice"></select></label>
+        <div class="pair"><button id="remoteScan">读取声卡列表</button><button id="remoteConnect">重新连接</button></div>
+      </div>
+      <p id="outStatus" class="link" role="status" hidden></p>
+      <div class="pair"><button id="testTone" title="发一声提示音到当前输出">测试音</button><button id="stopPlay">■ 停止播放</button></div>
+      <label class="switch" id="monitorRow" hidden><span>本机也听得到<small>打开时请戴耳机</small></span><input type="checkbox" id="monitor"></label>
+      <label class="field"><span>音量<output id="volumeVal"></output></span><input type="range" id="volume" min="0" max="1" step="0.01"></label>
+      <label class="switch" id="headphonesRow"><span>我戴着耳机<small>打开才能边说边播；关闭时说完才播，播放期间暂停拾音</small></span><input type="checkbox" id="headphones"></label>
+      <p id="quietNote" class="hint" hidden>合成声不会从本机放出来，可以边说边播。</p>
+    </section>
+  </aside>
+
+  <section class="col stage-col">
+    <ol class="stages" aria-label="处理流程">
+      <li id="stage-hear">听</li><li id="stage-asr">写</li><li id="stage-tts">合</li><li id="stage-play">播</li>
+    </ol>
+    <div id="feedScroll" class="panel feed-wrap">
+      <div id="empty" class="empty">
+        <b>点「开始监听」，然后正常说话</b>
+        <p>长句会按停顿自动切段，边说边合成、用你的音色模型播放（请戴耳机）。<br>还没播的段落可以按 <kbd>Esc</kbd> 撤回，或点文字改错字。</p>
+      </div>
+      <ol id="feed" class="feed" aria-live="polite"></ol>
+      <div id="hearing" class="utt voice" hidden><time>现在</time><div class="body"><p></p><div class="meta">正在听写</div></div><div class="side"><span class="chip voice">说话中</span></div></div>
+    </div>
+    <div class="foot">
+      <span><kbd>Esc</kbd> 撤回最新一句 / 停止播放</span><span><kbd>空格</kbd> 按住说话</span><span>快捷键只在本页面处于前台时有效</span>
+      <button id="clear" class="ghost">清空记录</button>
+    </div>
+  </section>
+
+  <aside class="col">
+    <section class="panel">
+      <h2>断句与即时性</h2>
+      <label class="switch"><span>长句边说边合<small>说话中途就切段推理，不等整句说完</small></span><input type="checkbox" id="chunking"></label>
+      <label class="field" id="pauseRow"><span>多短的停顿就切段<output id="pauseVal"></output></span><input type="range" id="pause" min="150" max="450" step="50"></label>
+      <label class="field" id="maxRow"><span>不停顿时最长一段<output id="maxChunkVal"></output></span><input type="range" id="maxChunk" min="3" max="8" step="0.5"></label>
+      <label class="field" id="silenceRow"><span>停顿多久算说完<output id="silenceVal"></output></span><input type="range" id="silence" min="300" max="1500" step="100"></label>
+      <label class="field"><span>麦克风灵敏度<output id="sensVal"></output></span><input type="range" id="sens" min="0" max="100" step="5"></label>
+      <label class="field"><span>播放前可撤回<output id="holdVal"></output></span><input type="range" id="hold" min="0" max="5000" step="250"></label>
+      <label class="switch"><span>忽略单独的语气词<small>只说了“嗯”“啊”时不播</small></span><input type="checkbox" id="skipFiller"></label>
+    </section>
+    <section class="panel">
+      <h2>声音</h2>
+      <label class="field"><span>语气保持时间<output id="groupWindowVal"></output></span><input type="range" id="groupWindow" min="5" max="120" step="5"><small class="hint">间隔不超过它的话，沿用同一个参考、种子和语速</small></label>
+      <label class="field"><span>参考录音（体检稳定）</span><select id="ref"></select></label>
+      <audio id="refAudio" controls preload="none"></audio>
+      <label class="switch"><span>按语气自动选参考<small>每句多花一点时间，对语气影响很小</small></span><input type="checkbox" id="autoRef"></label>
+      <label class="switch"><span>说得快时跟着加快<small>只加快不放慢，避免越说越落后</small></span><input type="checkbox" id="followRate"></label>
+      <label class="field"><span>语速<output id="speedVal"></output></span><input type="range" id="speed" min="0.8" max="1.3" step="0.05"></label>
+      <label class="switch"><span>每个语气组随机种子<small>关闭后固定用下面的数值</small></span><input type="checkbox" id="randomSeed"></label>
+      <label class="field row"><span>固定种子</span><input type="number" id="seed" min="0" step="1"></label>
+    </section>
+  </aside>
+</main>
+
+<main id="view-tune" class="view tune-grid" hidden>
+  <div class="col">
+    <section class="panel">
+      <h2>① 说一句话</h2>
+      <div class="row"><button id="t-rec" class="big">● 开始录音</button><span id="t-recTime" class="hint"></span></div>
+      <label class="hint">或上传录音 <input type="file" id="t-file" accept="audio/*"></label>
+      <audio id="t-mine" controls hidden></audio>
+      <div class="row"><input id="t-typed" placeholder="没有录音时，输入文字按线索找参考"><button id="t-goText">匹配</button></div>
+      <p class="hint">建议录 3–10 秒、安静环境、正常说话。</p>
+    </section>
+    <section class="panel" id="t-ana" hidden>
+      <h2>② 识别与语气分析</h2>
+      <textarea id="t-text" aria-label="合成文字（可修改）"></textarea>
+      <div id="t-tags" class="tags"></div>
+      <table id="t-feat" class="feat"></table>
+    </section>
+  </div>
+  <div class="col">
+    <section class="panel">
+      <h2>③ 最相似的参考录音</h2>
+      <div id="t-cands" role="radiogroup"><p class="hint">分析一句话之后，这里列出语气最接近的 5 条，点选可替换。</p></div>
+    </section>
+  </div>
+  <div class="col">
+    <section class="panel">
+      <h2>④ 合成</h2>
+      <label class="switch"><span>匹配我的语速</span><input type="checkbox" id="t-matchRate" checked></label>
+      <label class="switch"><span>带参考文本<small>实验：语气更强但易崩，建议只选标“稳定”的参考</small></span><input type="checkbox" id="t-usePrompt"></label>
+      <label class="switch"><span>同时生成直转版本<small>实验：你的语义 token + 目标音色</small></span><input type="checkbox" id="t-vc"></label>
+      <label class="switch"><span>同时用默认参考做对比</span><input type="checkbox" id="t-cmpDefault"></label>
+      <label class="field row"><span>种子</span><input id="t-seed" type="number" value="42"></label>
+      <button id="t-synth" class="big primary" disabled>合成</button>
+      <span id="t-status" class="hint"></span>
+      <div id="t-outs"></div>
+    </section>
+    <section class="panel">
+      <h2>抽卡</h2>
+      <div class="row"><button id="t-roll" class="primary" disabled>抽卡</button><label class="hint">每批 <input id="t-rollN" type="number" value="4" min="1" max="12"> 条</label><button id="t-rollStop" hidden>停止</button></div>
+      <p class="hint">按语气相似度加权随机抽参考、种子随机。固定无参考文本，只沿用“匹配我的语速”；上面手选的参考和种子不参与。再点一次会追加。</p>
+      <span id="t-rollStatus" class="hint"></span>
+      <p id="t-rollHead" class="hint" hidden>按读得对不对、时长和语调走向排序，语调这项区分力很弱，以你的耳朵为准。疑似读错的排在最后。</p>
+      <div id="t-rolls"></div>
+    </section>
+  </div>
+</main>
+
+<div id="toast" role="alert"></div>
+</body>
+</html>

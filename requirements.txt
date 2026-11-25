@@ -1,0 +1,6 @@
+# 在 GPT-SoVITS 已装好依赖的 Python 环境里再安装本文件（funasr、librosa 等多数已随 GPT-SoVITS 安装）
+numpy
+soundfile
+librosa
+funasr
+websockets>=11
