@@ -2,6 +2,8 @@
 
 [中文](README.md) | English
 
+<img src="docs/screenshot.jpg" alt="VoxRelay live page (demo sentences, placeholder model names)" width="100%">
+
 A **real-time voice-changing workbench** built on [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS). Speak into the microphone; VoxRelay transcribes the speech, re-speaks it in your trained voice, and plays it to your speakers, a virtual sound card, or a virtual sound card on another Mac in your LAN (for use as a meeting microphone).
 
 ```
@@ -17,6 +19,21 @@ It is a speech → text → speech pipeline: expect 1.5–3 s of latency, and re
 - Automatic segmentation or push-to-talk; optional undo window; edit and resend text.
 - Output to local speakers, a local virtual sound card, or (over SSH) a virtual sound card on another Mac.
 - A tuning page that matches reference clips by prosody and ranks random takes.
+
+## Compared with RVC real-time conversion
+
+Both models were built from the same pool of about 20 minutes of phone voice messages (not identical training sets). 40 held-out utterances from a male speaker:
+
+| Metric | RVC real-time | RVC offline | VoxRelay real-time |
+|---|---|---|---|
+| Character error rate, mean (lower is better) | 0.44 | 0.32 | **0.29** |
+| Utterances with CER > 0.5 (of 40) | 13 | 8 | **7** |
+| Speaker similarity, ERes2NetV2¹ | 0.74 | 0.80 | **0.84** |
+| Pitch correlation with the source | **0.86** | 0.84 | 0.35 |
+| Utterances with duration off by > 15% | 3 | **0** | 15 |
+| Latency | **~0.5–0.6 s** | n/a | 1.6–2.9 s per segment |
+
+VoxRelay is clearly more intelligible than the real-time RVC path here (the gap to offline RVC is not significant: −0.04, 95% CI −0.12 to +0.04). RVC keeps your intonation and timing far better and is much faster. For each RVC column the better of two transpose settings is shown. ¹ GPT-SoVITS v2Pro uses this speaker model itself, which favors VoxRelay. No listening test or MOS model was used. Full numbers and conditions are in the [Chinese README](README.md#与-rvc-实时变声对比).
 
 ## Requirements
 
